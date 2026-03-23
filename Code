@@ -1,0 +1,107 @@
+#include <ESP8266WiFi.h>
+#include <ESP8266WebServer.h>
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
+
+// WiFi credentials
+const char* ssid = "YOUR_WIFI_NAME";
+const char* password = "YOUR_WIFI_PASSWORD";
+
+// LCD setup (0x27 is common I2C address)
+LiquidCrystal_I2C lcd(0x27, 16, 2);
+
+// Web server
+ESP8266WebServer server(80);
+
+// Message variables
+String scrollText = "Welcome!";
+String staticText = "Smart Notice Board";
+
+int scrollIndex = 0;
+
+// HTML Page
+String webpage = R"rawliteral(
+<!DOCTYPE html>
+<html>
+<head>
+<title>Smart Notice Board</title>
+<style>
+body { font-family: Arial; text-align: center; }
+input { padding: 10px; margin: 10px; width: 80%; }
+button { padding: 10px 20px; }
+</style>
+</head>
+<body>
+<h2>Smart Notice Board</h2>
+<form action="/update">
+<input type="text" name="line1" placeholder="Enter scrolling text"><br>
+<input type="text" name="line2" placeholder="Enter static text"><br>
+<button type="submit">Update</button>
+</form>
+</body>
+</html>
+)rawliteral";
+
+// Handle root page
+void handleRoot() {
+  server.send(200, "text/html", webpage);
+}
+
+// Handle update request
+void handleUpdate() {
+  if (server.hasArg("line1")) {
+    scrollText = server.arg("line1");
+  }
+  if (server.hasArg("line2")) {
+    staticText = server.arg("line2");
+  }
+  server.send(200, "text/html", "<h3>Updated Successfully!</h3><a href='/'>Go Back</a>");
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  lcd.init();
+  lcd.backlight();
+
+  WiFi.begin(ssid, password);
+  lcd.setCursor(0, 0);
+  lcd.print("Connecting WiFi");
+
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+  }
+
+  lcd.clear();
+  lcd.print("Connected!");
+  lcd.setCursor(0, 1);
+  lcd.print(WiFi.localIP());
+
+  // Server routes
+  server.on("/", handleRoot);
+  server.on("/update", handleUpdate);
+
+  server.begin();
+}
+
+void loop() {
+  server.handleClient();
+
+  // Display static text (2nd row)
+  lcd.setCursor(0, 1);
+  lcd.print("                "); // clear row
+  lcd.setCursor(0, 1);
+  lcd.print(staticText.substring(0, 16));
+
+  // Scrolling text (1st row)
+  String displayText = scrollText + "                ";
+  lcd.setCursor(0, 0);
+  lcd.print(displayText.substring(scrollIndex, scrollIndex + 16));
+
+  scrollIndex++;
+  if (scrollIndex > displayText.length() - 16) {
+    scrollIndex = 0;
+  }
+
+  delay(300);
+}
